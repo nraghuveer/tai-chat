@@ -2,7 +2,6 @@ package openai
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/openai/openai-go"
 	"github.com/sirupsen/logrus"
@@ -41,11 +40,11 @@ func (ai *OpenAIClient) APIKey() string {
 // for now just return the OpenAI client
 func NewAIClient(aiMode AIModel, logger *logrus.Entry) (AIClientInterface, error) {
 	// get the API key from environment variable
-	apiKey := os.Getenv(aiMode.APIKeyEnvVariable)
-	if apiKey == "" {
-		logger.Infof("API key not found for provider: %s and model: %s", aiMode.Provider, aiMode.Model)
-		return nil, ErrAPIKeyNotFound
-	}
+	// apiKey := os.Getenv(aiMode.APIKeyEnvVariable)
+	// if apiKey == "" {
+	// 	logger.Infof("API key not found for provider: %s and model: %s", aiMode.Provider, aiMode.Model)
+	// 	return nil, ErrAPIKeyNotFound
+	// }
 	openaiClient := openai.NewClient(openai.DefaultClientOptions()...)
-	return &OpenAIClient{apiKey: apiKey, client: &openaiClient}, nil
+	return &OpenAIClient{apiKey: "", client: &openaiClient}, nil
 }

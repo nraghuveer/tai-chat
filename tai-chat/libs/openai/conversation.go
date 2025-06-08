@@ -5,11 +5,12 @@ import (
 	"iter"
 
 	"github.com/openai/openai-go"
+	"github.com/sirupsen/logrus"
 )
 
 type ConversationInterface interface {
 	AddMessage(content string) error
-	StreamResponse(ctx context.Context) (iter.Seq[*ConversationResponse], error)
+	StreamResponse(ctx context.Context, logger *logrus.Entry) iter.Seq[*ConversationResponse]
 	TokensUsed() int64
 }
 
@@ -42,17 +43,21 @@ func (c *OpenAIConversation) AddMessage(content string) error {
 	return nil
 }
 
-func (c *OpenAIConversation) StreamResponse(ctx context.Context) (iter.Seq[*ConversationResponse], error) {
+// StreamResponse
+func (c *OpenAIConversation) StreamResponse(ctx context.Context, logger *logrus.Entry) iter.Seq[*ConversationResponse] {
 	stream := c.client.client.Chat.Completions.NewStreaming(ctx, *c.params)
 	acc := openai.ChatCompletionAccumulator{}
 
 	f := func(yield func(*ConversationResponse) bool) {
+		defer func() {
+			c.tokensUsed += acc.Usage.TotalTokens
+		}()
+
 		for stream.Next() {
 			chunk := stream.Current()
 			acc.AddChunk(chunk)
 			if _, ok := acc.JustFinishedContent(); ok {
 				if !yield(&ConversationResponse{Finished: true}) {
-					c.tokensUsed += acc.Usage.TotalTokens
 					return
 				}
 			}
@@ -66,14 +71,11 @@ func (c *OpenAIConversation) StreamResponse(ctx context.Context) (iter.Seq[*Conv
 		}
 
 		if err := stream.Err(); err != nil {
-			c.tokensUsed += acc.Usage.TotalTokens
 			yield(&ConversationResponse{Err: err})
 			return
 		}
-
-		c.tokensUsed += acc.Usage.TotalTokens
 	}
-	return f, nil
+	return f
 }
 
 func (c *OpenAIConversation) TokensUsed() int64 {
