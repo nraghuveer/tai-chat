@@ -10,6 +10,7 @@ import (
 
 type ConversationInterface interface {
 	AddMessage(content string) error
+	AddSystemResponse(content string) error
 	StreamResponse(ctx context.Context, logger *logrus.Entry) iter.Seq[*ConversationResponse]
 	TokensUsed() int64
 }
@@ -29,17 +30,21 @@ type OpenAIConversation struct {
 func NewOpenAIConversation(ctx context.Context, client *OpenAIClient, systemPrompt string, developerPrompt string) (ConversationInterface, error) {
 	param := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.DeveloperMessage(developerPrompt),
-			openai.SystemMessage(systemPrompt),
+			// openai.DeveloperMessage(developerPrompt),
+			// openai.SystemMessage(systemPrompt),
 		},
-		Seed:  openai.Int(1),
-		Model: openai.ChatModelGPT4o,
+		Model: client.model.Model,
 	}
 	return &OpenAIConversation{client: client, params: &param}, nil
 }
 
 func (c *OpenAIConversation) AddMessage(content string) error {
 	c.params.Messages = append(c.params.Messages, openai.UserMessage(content))
+	return nil
+}
+
+func (c *OpenAIConversation) AddSystemResponse(content string) error {
+	c.params.Messages = append(c.params.Messages, openai.SystemMessage(content))
 	return nil
 }
 
@@ -57,6 +62,11 @@ func (c *OpenAIConversation) StreamResponse(ctx context.Context, logger *logrus.
 			chunk := stream.Current()
 			acc.AddChunk(chunk)
 			if _, ok := acc.JustFinishedContent(); ok {
+				if !yield(&ConversationResponse{Finished: true}) {
+					return
+				}
+			}
+			if _, ok := acc.JustFinishedRefusal(); ok {
 				if !yield(&ConversationResponse{Finished: true}) {
 					return
 				}
